@@ -2,44 +2,134 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>PeerJS Chat</title>
+    <title>PeerJS QR Chat</title>
     <style>
       body {
         font-family: Arial;
-        background: #111;
+        background: #121212;
         color: #fff;
-        text-align: center;
         padding: 20px;
+        text-align: center;
+      }
+      input,
+      button {
+        padding: 10px;
+        margin: 5px;
+        border: none;
+        border-radius: 4px;
       }
       #chat {
         background: #222;
         padding: 10px;
-        margin: 10px auto;
-        width: 80%;
-        max-width: 600px;
         height: 200px;
         overflow-y: auto;
+        margin: 10px auto;
+        max-width: 600px;
       }
-      input,
-      button {
-        margin: 5px;
-        padding: 10px;
+      #qrcode {
+        margin-top: 10px;
+      }
+      #status {
+        color: lightgreen;
       }
     </style>
   </head>
   <body>
-    <h2>Peer-to-Peer Chat</h2>
-    <p>Your ID: <span id="my-id">Loading...</span></p>
-
-    <input id="peer-id-input" placeholder="Enter peer ID to connect" />
+    <h1>🔗 P2P QR Chat with PeerJS</h1>
+    <div>
+      Your Nickname: <input id="nickname" placeholder="Nickname" value="Me" />
+    </div>
+    <div>Your ID: <span id="my-id">Loading...</span></div>
+    <div id="qrcode"></div>
+    <hr />
+    <input id="peer-id-input" placeholder="Friend's ID" />
     <button onclick="connectToPeer()">Connect</button>
+    <div id="status">Not connected</div>
 
     <div id="chat"></div>
 
-    <input id="msg" placeholder="Type your message" />
+    <input id="msg" placeholder="Type message" />
     <button onclick="sendMsg()">Send</button>
+    <br />
+    <input type="file" id="fileInput" />
+    <button onclick="sendFile()">Send File</button>
 
     <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
-    <script src="script.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+      const chatBox = document.getElementById("chat");
+      const msgInput = document.getElementById("msg");
+      const peerIdInput = document.getElementById("peer-id-input");
+      const nicknameInput = document.getElementById("nickname");
+      const status = document.getElementById("status");
+
+      let conn;
+      let peerId = localStorage.getItem("peer_id");
+      const peer = new Peer(peerId || undefined);
+
+      peer.on("open", (id) => {
+        document.getElementById("my-id").textContent = id;
+        localStorage.setItem("peer_id", id);
+        new QRCode("qrcode", id);
+      });
+
+      peer.on("connection", (connection) => {
+        setupConnection(connection);
+      });
+
+      function connectToPeer() {
+        const id = peerIdInput.value.trim();
+        if (!id) return;
+        const connection = peer.connect(id);
+        setupConnection(connection);
+      }
+
+      function setupConnection(connection) {
+        conn = connection;
+        status.textContent = `Connecting to ${conn.peer}...`;
+
+        conn.on("open", () => {
+          status.textContent = `Connected to ${conn.peer}`;
+          chatBox.innerHTML += `<div style='color: lightgreen;'>✅ Connected to ${conn.peer}</div>`;
+        });
+
+        conn.on("data", (data) => {
+          if (typeof data === "string") {
+            chatBox.innerHTML += `<div><strong>${conn.peer}:</strong> ${data}</div>`;
+          } else if (data instanceof ArrayBuffer) {
+            const blob = new Blob([data]);
+            const url = URL.createObjectURL(blob);
+            chatBox.innerHTML += `<div><strong>${conn.peer} sent a file:</strong> <a href="${url}" download="file">Download</a></div>`;
+          }
+        });
+
+        conn.on("close", () => {
+          status.textContent = `🔌 Disconnected from ${conn.peer}`;
+          chatBox.innerHTML += `<div style='color: orange;'>🔌 Disconnected from ${conn.peer}</div>`;
+        });
+      }
+
+      function sendMsg() {
+        const msg = msgInput.value.trim();
+        const name = nicknameInput.value || "Me";
+        if (!msg || !conn || !conn.open) return;
+        conn.send(`${name}: ${msg}`);
+        chatBox.innerHTML += `<div><strong>${name}:</strong> ${msg}</div>`;
+        msgInput.value = "";
+      }
+
+      function sendFile() {
+        const fileInput = document.getElementById("fileInput");
+        const file = fileInput.files[0];
+        if (!file || !conn || !conn.open) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          conn.send(reader.result);
+          chatBox.innerHTML += `<div><strong>You sent a file:</strong> ${file.name}</div>`;
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    </script>
   </body>
 </html>
