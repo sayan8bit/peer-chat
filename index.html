@@ -35,7 +35,7 @@
     </style>
   </head>
   <body>
-    <h1>🔗 P2P QR Chat with PeerJS</h1>
+    <h1>🔗 P2P QR Chat jbjbn with PeerJS</h1>
     <div>
       Your Nickname: <input id="nickname" placeholder="Nickname" value="Me" />
     </div>
@@ -63,7 +63,7 @@
       const nicknameInput = document.getElementById("nickname");
       const status = document.getElementById("status");
 
-      let conn;
+      let conn = null;
       let peerId = localStorage.getItem("peer_id");
       const peer = new Peer(peerId || undefined);
 
@@ -73,39 +73,53 @@
         new QRCode("qrcode", id);
       });
 
-      peer.on("connection", (connection) => {
-        setupConnection(connection);
+      peer.on("connection", (incoming) => {
+        incoming.on("open", () => {
+          conn = incoming;
+          status.textContent = `Connected to ${conn.peer}`;
+          chatBox.innerHTML += `<div style='color: lightgreen;'>✅ Connected to ${conn.peer}</div>`;
+
+          conn.on("data", (data) => {
+            if (typeof data === "string") {
+              chatBox.innerHTML += `<div><strong>${conn.peer}:</strong> ${data}</div>`;
+            } else if (data instanceof ArrayBuffer) {
+              const blob = new Blob([data]);
+              const url = URL.createObjectURL(blob);
+              chatBox.innerHTML += `<div><strong>${conn.peer} sent a file:</strong> <a href="${url}" download="file">Download</a></div>`;
+            }
+          });
+
+          conn.on("close", () => {
+            status.textContent = `🔌 Disconnected from ${conn.peer}`;
+            chatBox.innerHTML += `<div style='color: orange;'>🔌 Disconnected from ${conn.peer}</div>`;
+          });
+        });
       });
 
       function connectToPeer() {
         const id = peerIdInput.value.trim();
         if (!id) return;
-        const connection = peer.connect(id);
-        setupConnection(connection);
-      }
 
-      function setupConnection(connection) {
-        conn = connection;
-        status.textContent = `Connecting to ${conn.peer}...`;
-
-        conn.on("open", () => {
+        const outgoing = peer.connect(id);
+        outgoing.on("open", () => {
+          conn = outgoing;
           status.textContent = `Connected to ${conn.peer}`;
           chatBox.innerHTML += `<div style='color: lightgreen;'>✅ Connected to ${conn.peer}</div>`;
-        });
 
-        conn.on("data", (data) => {
-          if (typeof data === "string") {
-            chatBox.innerHTML += `<div><strong>${conn.peer}:</strong> ${data}</div>`;
-          } else if (data instanceof ArrayBuffer) {
-            const blob = new Blob([data]);
-            const url = URL.createObjectURL(blob);
-            chatBox.innerHTML += `<div><strong>${conn.peer} sent a file:</strong> <a href="${url}" download="file">Download</a></div>`;
-          }
-        });
+          conn.on("data", (data) => {
+            if (typeof data === "string") {
+              chatBox.innerHTML += `<div><strong>${conn.peer}:</strong> ${data}</div>`;
+            } else if (data instanceof ArrayBuffer) {
+              const blob = new Blob([data]);
+              const url = URL.createObjectURL(blob);
+              chatBox.innerHTML += `<div><strong>${conn.peer} sent a file:</strong> <a href="${url}" download="file">Download</a></div>`;
+            }
+          });
 
-        conn.on("close", () => {
-          status.textContent = `🔌 Disconnected from ${conn.peer}`;
-          chatBox.innerHTML += `<div style='color: orange;'>🔌 Disconnected from ${conn.peer}</div>`;
+          conn.on("close", () => {
+            status.textContent = `🔌 Disconnected from ${conn.peer}`;
+            chatBox.innerHTML += `<div style='color: orange;'>🔌 Disconnected from ${conn.peer}</div>`;
+          });
         });
       }
 
