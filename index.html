@@ -3,209 +3,238 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>QR Chat</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>PeerJS WhatsApp Chat</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+      }
+      #sidebar {
+        width: 250px;
+        background-color: #f1f1f1;
+        padding: 10px;
+        box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+        overflow-y: auto;
+      }
+      #chatContainer {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+      #chatBox {
+        flex: 1;
+        padding: 10px;
+        overflow-y: auto;
+        background-color: #e5ddd5;
+      }
+      #messageInput {
+        display: flex;
+        padding: 10px;
+        background-color: #fff;
+      }
+      #messageInput input[type="text"] {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+      }
+      #messageInput button {
+        margin-left: 10px;
+        padding: 10px;
+      }
+      .message {
+        max-width: 60%;
+        margin-bottom: 10px;
+        padding: 10px;
+        border-radius: 10px;
+        clear: both;
+      }
+      .me {
+        background-color: #dcf8c6;
+        align-self: flex-end;
+        margin-left: auto;
+      }
+      .friend {
+        background-color: #fff;
+        align-self: flex-start;
+        margin-right: auto;
+      }
+      .peer-btn {
+        display: block;
+        padding: 10px;
+        margin: 5px 0;
+        background-color: #ddd;
+        border: none;
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+      }
+      #qrPopup {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        justify-content: center;
+        align-items: center;
+      }
+      #qrPopupContent {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+      }
+    </style>
   </head>
-  <body class="bg-gray-100 h-screen flex">
-    <!-- Sidebar -->
-    <div class="w-full sm:w-1/3 lg:w-1/4 bg-white border-r flex flex-col">
-      <div class="p-4 border-b flex justify-between items-center">
-        <h1 class="text-lg font-bold">Your ID</h1>
-        <button id="showQRBtn" class="text-blue-500 text-sm">Show QR</button>
+  <body>
+    <div id="sidebar">
+      <button onclick="toggleQRPopup()">Show My QR</button>
+      <div id="peerList"></div>
+      <input id="friendIdInput" placeholder="Friend ID" />
+      <button onclick="connectToFriend()">Connect</button>
+    </div>
+
+    <div id="chatContainer">
+      <div id="chatBox"></div>
+      <div id="messageInput">
+        <input id="message" type="text" placeholder="Type a message..." />
+        <button onclick="sendMessage()">Send</button>
+        <button onclick="sendFile()">📎</button>
       </div>
-      <div id="my-id" class="text-sm px-4 text-gray-600 break-words"></div>
-      <div id="qr-container" class="hidden p-4">
+    </div>
+
+    <div id="qrPopup" onclick="toggleQRPopup()">
+      <div id="qrPopupContent">
         <canvas id="qrcode"></canvas>
       </div>
-      <div class="p-4">
-        <input
-          id="peerIdInput"
-          class="w-full border px-2 py-1 text-sm"
-          placeholder="Enter Friend ID"
-        />
-        <button
-          id="connectBtn"
-          class="w-full mt-2 bg-blue-500 text-white py-1 text-sm"
-        >
-          Connect
-        </button>
-      </div>
-      <div class="overflow-y-auto flex-1 border-t">
-        <ul id="userList" class="divide-y text-sm"></ul>
-      </div>
     </div>
 
-    <!-- Chat Section -->
-    <div class="flex-1 flex flex-col">
-      <div class="p-4 bg-white border-b flex items-center">
-        <div id="currentUser" class="font-bold text-gray-700">
-          No user selected
-        </div>
-      </div>
-      <div
-        id="chatArea"
-        class="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50"
-      ></div>
-      <div class="p-4 border-t bg-white flex items-center">
-        <input
-          id="msgInput"
-          class="flex-1 border px-2 py-1 text-sm"
-          placeholder="Type a message"
-        />
-        <input id="fileInput" type="file" class="ml-2 hidden" />
-        <button
-          id="sendFileBtn"
-          class="ml-2 bg-yellow-400 text-sm px-2 py-1 rounded"
-        >
-          📎
-        </button>
-        <button
-          id="sendBtn"
-          class="ml-2 bg-green-500 text-white px-4 py-1 rounded"
-        >
-          Send
-        </button>
-      </div>
-    </div>
-
+    <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrious"></script>
     <script>
-      const peer = new Peer();
-      const connections = {};
-      const messages = {};
-      let currentPeerId = null;
-
-      const myIdDiv = document.getElementById("my-id");
-      const showQRBtn = document.getElementById("showQRBtn");
-      const qrContainer = document.getElementById("qr-container");
-      const qrcodeCanvas = document.getElementById("qrcode");
-
-      const peerIdInput = document.getElementById("peerIdInput");
-      const connectBtn = document.getElementById("connectBtn");
-      const userList = document.getElementById("userList");
-
-      const chatArea = document.getElementById("chatArea");
-      const currentUser = document.getElementById("currentUser");
-      const msgInput = document.getElementById("msgInput");
-      const sendBtn = document.getElementById("sendBtn");
-
-      const sendFileBtn = document.getElementById("sendFileBtn");
-      const fileInput = document.getElementById("fileInput");
+      let peer = new Peer();
+      let connections = {};
+      let currentConnId = null;
 
       peer.on("open", (id) => {
-        myIdDiv.textContent = id;
-        QRCode.toCanvas(qrcodeCanvas, id);
+        generateQR(id);
       });
-
-      showQRBtn.onclick = () => {
-        qrContainer.classList.toggle("hidden");
-      };
-
-      connectBtn.onclick = () => {
-        const friendId = peerIdInput.value.trim();
-        if (!friendId || connections[friendId]) return;
-        const conn = peer.connect(friendId);
-        setupConnection(conn, friendId);
-      };
 
       peer.on("connection", (conn) => {
-        if (!connections[conn.peer]) {
-          setupConnection(conn, conn.peer);
-        }
+        conn.on("open", () => {
+          setupConnection(conn.peer, conn);
+        });
       });
 
-      function setupConnection(conn, id) {
+      function setupConnection(id, conn) {
         connections[id] = conn;
-        messages[id] = messages[id] || [];
-
-        conn.on("open", () => {
-          addUserToList(id);
-          if (!currentPeerId) {
-            switchToUser(id);
-          }
-        });
+        addPeerButton(id);
 
         conn.on("data", (data) => {
-          if (data.type === "msg") {
-            messages[id].push({ text: data.text, from: "them" });
-            if (currentPeerId === id) renderMessages(id);
-          } else if (data.type === "file") {
-            const url = URL.createObjectURL(data.blob);
-            messages[id].push({ file: url, name: data.name, from: "them" });
-            if (currentPeerId === id) renderMessages(id);
+          if (typeof data === "string") {
+            appendMessage(data, "friend");
+          } else {
+            const blob = new Blob([data]);
+            const url = URL.createObjectURL(blob);
+            appendMessage(
+              `<a href="${url}" download="file">📎 File</a>`,
+              "friend",
+              true
+            );
           }
         });
 
         conn.on("close", () => {
-          alert(`${id} disconnected`);
-          document.querySelector(`[data-id='${id}']`)?.remove();
-          if (currentPeerId === id) {
-            currentUser.textContent = "No user selected";
-            chatArea.innerHTML = "";
+          alert(`Disconnected from ${id}`);
+        });
+      }
+
+      function addPeerButton(id) {
+        if (!document.getElementById(`btn-${id}`)) {
+          const btn = document.createElement("button");
+          btn.textContent = id;
+          btn.id = `btn-${id}`;
+          btn.className = "peer-btn";
+          btn.onclick = () => switchChat(id);
+          document.getElementById("peerList").appendChild(btn);
+        }
+      }
+
+      function switchChat(id) {
+        currentConnId = id;
+        document.getElementById("chatBox").innerHTML = ""; // Clear chat
+      }
+
+      function connectToFriend() {
+        const id = document.getElementById("friendIdInput").value;
+        if (!connections[id]) {
+          const conn = peer.connect(id);
+          conn.on("open", () => setupConnection(id, conn));
+        }
+      }
+
+      function sendMessage() {
+        const msg = document.getElementById("message").value;
+        if (currentConnId && connections[currentConnId]) {
+          connections[currentConnId].send(msg);
+          appendMessage(msg, "me");
+          document.getElementById("message").value = "";
+        }
+      }
+
+      function sendFile() {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.onchange = () => {
+          const file = input.files[0];
+          if (file && currentConnId && connections[currentConnId]) {
+            connections[currentConnId].send(file);
+            appendMessage(
+              `<a href="" download="${file.name}">📎 ${file.name}</a>`,
+              "me",
+              true
+            );
           }
-          delete connections[id];
+        };
+        input.click();
+      }
+
+      function appendMessage(msg, sender, isHTML = false) {
+        const div = document.createElement("div");
+        div.className = `message ${sender}`;
+        div.innerHTML = isHTML ? msg : escapeHtml(msg);
+        document.getElementById("chatBox").appendChild(div);
+        document.getElementById("chatBox").scrollTop =
+          document.getElementById("chatBox").scrollHeight;
+      }
+
+      function escapeHtml(text) {
+        const map = {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;",
+        };
+        return text.replace(/[&<>"']/g, (m) => map[m]);
+      }
+
+      function generateQR(id) {
+        const qr = new QRious({
+          element: document.getElementById("qrcode"),
+          value: id,
+          size: 200,
         });
       }
 
-      function addUserToList(id) {
-        if (document.querySelector(`[data-id='${id}']`)) return;
-        const li = document.createElement("li");
-        li.className = "p-2 cursor-pointer hover:bg-gray-100";
-        li.textContent = id;
-        li.dataset.id = id;
-        li.onclick = () => switchToUser(id);
-        userList.appendChild(li);
+      function toggleQRPopup() {
+        const qr = document.getElementById("qrPopup");
+        qr.style.display = qr.style.display === "flex" ? "none" : "flex";
       }
-
-      function switchToUser(id) {
-        currentPeerId = id;
-        currentUser.textContent = id;
-        renderMessages(id);
-      }
-
-      function renderMessages(id) {
-        chatArea.innerHTML = "";
-        messages[id].forEach((msg) => {
-          const div = document.createElement("div");
-          div.className = `max-w-xs px-3 py-2 rounded-lg text-sm ${
-            msg.from === "me" ? "ml-auto bg-green-200" : "mr-auto bg-gray-300"
-          }`;
-
-          if (msg.text) {
-            div.textContent = msg.text;
-          } else if (msg.file) {
-            div.innerHTML = `<a href="${msg.file}" download="${msg.name}" class="underline">${msg.name}</a>`;
-          }
-
-          chatArea.appendChild(div);
-        });
-        chatArea.scrollTop = chatArea.scrollHeight;
-      }
-
-      sendBtn.onclick = () => {
-        const text = msgInput.value.trim();
-        if (!text || !currentPeerId) return;
-        const conn = connections[currentPeerId];
-        conn.send({ type: "msg", text });
-        messages[currentPeerId].push({ text, from: "me" });
-        msgInput.value = "";
-        renderMessages(currentPeerId);
-      };
-
-      sendFileBtn.onclick = () => fileInput.click();
-      fileInput.onchange = () => {
-        const file = fileInput.files[0];
-        if (!file || !currentPeerId) return;
-        const conn = connections[currentPeerId];
-        conn.send({ type: "file", name: file.name, blob: file });
-        messages[currentPeerId].push({
-          file: URL.createObjectURL(file),
-          name: file.name,
-          from: "me",
-        });
-        renderMessages(currentPeerId);
-      };
     </script>
   </body>
 </html>
