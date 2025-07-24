@@ -21,10 +21,29 @@
       #chat {
         background: #222;
         padding: 10px;
-        height: 200px;
+        height: 300px;
         overflow-y: auto;
         margin: 10px auto;
         max-width: 600px;
+        text-align: left;
+      }
+      .message {
+        padding: 5px 10px;
+        margin: 5px 0;
+        max-width: 70%;
+        border-radius: 10px;
+      }
+      .me {
+        background-color: #007bff;
+        color: white;
+        margin-left: auto;
+        text-align: right;
+      }
+      .friend {
+        background-color: #444;
+        color: white;
+        margin-right: auto;
+        text-align: left;
       }
       #qrcode {
         margin-top: 10px;
@@ -35,7 +54,7 @@
     </style>
   </head>
   <body>
-    <h1>🔗 P2P QR Chat jbjbn with PeerJS</h1>
+    <h1>🔗 P2P QR Chat with PeerJS</h1>
     <div>
       Your Nickname: <input id="nickname" placeholder="Nickname" value="Me" />
     </div>
@@ -77,21 +96,24 @@
         incoming.on("open", () => {
           conn = incoming;
           status.textContent = `Connected to ${conn.peer}`;
-          chatBox.innerHTML += `<div style='color: lightgreen;'>✅ Connected to ${conn.peer}</div>`;
+          addSystemMessage(`✅ Connected to ${conn.peer}`);
 
           conn.on("data", (data) => {
             if (typeof data === "string") {
-              chatBox.innerHTML += `<div><strong>${conn.peer}:</strong> ${data}</div>`;
+              addMessage(data, "friend");
             } else if (data instanceof ArrayBuffer) {
               const blob = new Blob([data]);
               const url = URL.createObjectURL(blob);
-              chatBox.innerHTML += `<div><strong>${conn.peer} sent a file:</strong> <a href="${url}" download="file">Download</a></div>`;
+              addMessage(
+                `📁 <a href="${url}" download="file">Download file</a>`,
+                "friend"
+              );
             }
           });
 
           conn.on("close", () => {
             status.textContent = `🔌 Disconnected from ${conn.peer}`;
-            chatBox.innerHTML += `<div style='color: orange;'>🔌 Disconnected from ${conn.peer}</div>`;
+            addSystemMessage(`🔌 Disconnected from ${conn.peer}`);
           });
         });
       });
@@ -104,21 +126,24 @@
         outgoing.on("open", () => {
           conn = outgoing;
           status.textContent = `Connected to ${conn.peer}`;
-          chatBox.innerHTML += `<div style='color: lightgreen;'>✅ Connected to ${conn.peer}</div>`;
+          addSystemMessage(`✅ Connected to ${conn.peer}`);
 
           conn.on("data", (data) => {
             if (typeof data === "string") {
-              chatBox.innerHTML += `<div><strong>${conn.peer}:</strong> ${data}</div>`;
+              addMessage(data, "friend");
             } else if (data instanceof ArrayBuffer) {
               const blob = new Blob([data]);
               const url = URL.createObjectURL(blob);
-              chatBox.innerHTML += `<div><strong>${conn.peer} sent a file:</strong> <a href="${url}" download="file">Download</a></div>`;
+              addMessage(
+                `📁 <a href="${url}" download="file">Download file</a>`,
+                "friend"
+              );
             }
           });
 
           conn.on("close", () => {
             status.textContent = `🔌 Disconnected from ${conn.peer}`;
-            chatBox.innerHTML += `<div style='color: orange;'>🔌 Disconnected from ${conn.peer}</div>`;
+            addSystemMessage(`🔌 Disconnected from ${conn.peer}`);
           });
         });
       }
@@ -127,8 +152,9 @@
         const msg = msgInput.value.trim();
         const name = nicknameInput.value || "Me";
         if (!msg || !conn || !conn.open) return;
-        conn.send(`${name}: ${msg}`);
-        chatBox.innerHTML += `<div><strong>${name}:</strong> ${msg}</div>`;
+        const formatted = `${name}: ${msg}`;
+        conn.send(formatted);
+        addMessage(formatted, "me");
         msgInput.value = "";
       }
 
@@ -140,9 +166,25 @@
         const reader = new FileReader();
         reader.onload = () => {
           conn.send(reader.result);
-          chatBox.innerHTML += `<div><strong>You sent a file:</strong> ${file.name}</div>`;
+          addMessage(`📁 ${file.name} sent`, "me");
         };
         reader.readAsArrayBuffer(file);
+      }
+
+      function addMessage(text, sender) {
+        const msgDiv = document.createElement("div");
+        msgDiv.className = `message ${sender}`;
+        msgDiv.innerHTML = text;
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
+      function addSystemMessage(text) {
+        const msgDiv = document.createElement("div");
+        msgDiv.style.color = "lightgreen";
+        msgDiv.textContent = text;
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
       }
     </script>
   </body>
