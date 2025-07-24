@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>PeerJS Chat</title>
+    <style>
+      body {
+        font-family: Arial;
+        background: #111;
+        color: #fff;
+        text-align: center;
+        padding: 20px;
+      }
+      #chat {
+        background: #222;
+        padding: 10px;
+        margin: 10px auto;
+        width: 80%;
+        max-width: 600px;
+        height: 200px;
+        overflow-y: auto;
+      }
+      input,
+      button {
+        margin: 5px;
+        padding: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Peer-to-Peer Chat</h2>
+    <p>Your ID: <span id="my-id">Loading...</span></p>
+
+    <input id="peer-id-input" placeholder="Enter peer ID to connect" />
+    <button onclick="connectToPeer()">Connect</button>
+
+    <div id="chat"></div>
+
+    <input id="msg" placeholder="Type your message" />
+    <button onclick="sendMsg()">Send</button>
+
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
