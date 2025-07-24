@@ -7,10 +7,22 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @media (max-width: 640px) {
+        .sidebar {
+          display: none;
+        }
+        .chat-only {
+          width: 100%;
+        }
+      }
+    </style>
   </head>
-  <body class="bg-gray-100 h-screen flex">
+  <body class="bg-gray-100 h-screen flex flex-col sm:flex-row">
     <!-- Sidebar -->
-    <div class="w-full sm:w-1/3 lg:w-1/4 bg-white border-r flex flex-col">
+    <div
+      class="sidebar w-full sm:w-1/3 lg:w-1/4 bg-white border-r flex flex-col"
+    >
       <div class="p-4 border-b flex justify-between items-center">
         <h1 class="text-lg font-bold">Your ID</h1>
         <button id="showQRBtn" class="text-blue-500 text-sm">Show QR</button>
@@ -38,11 +50,12 @@
     </div>
 
     <!-- Chat Section -->
-    <div class="flex-1 flex flex-col">
-      <div class="p-4 bg-white border-b flex items-center">
+    <div class="chat-only flex-1 flex flex-col">
+      <div class="p-4 bg-white border-b flex justify-between items-center">
         <div id="currentUser" class="font-bold text-gray-700">
           No user selected
         </div>
+        <div id="userStatus" class="text-sm text-gray-500 ml-2">Offline</div>
       </div>
       <div
         id="chatArea"
@@ -71,32 +84,28 @@
     </div>
 
     <script>
-      // Load or Generate a fixed peer ID
-      let myId = localStorage.getItem("fixedPeerId");
-      if (!myId) {
-        myId = "user-" + Math.random().toString(36).substring(2, 9);
-        localStorage.setItem("fixedPeerId", myId);
-      }
+      let myId =
+        localStorage.getItem("fixedPeerId") ||
+        `user-${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem("fixedPeerId", myId);
 
       const peer = new Peer(myId);
       const connections = {};
-      const messages = {};
+      const messages = JSON.parse(localStorage.getItem("chatMessages") || "{}");
       let currentPeerId = null;
 
       const myIdDiv = document.getElementById("my-id");
       const showQRBtn = document.getElementById("showQRBtn");
       const qrContainer = document.getElementById("qr-container");
       const qrcodeCanvas = document.getElementById("qrcode");
-
       const peerIdInput = document.getElementById("peerIdInput");
       const addUserBtn = document.getElementById("addUserBtn");
       const userList = document.getElementById("userList");
-
       const chatArea = document.getElementById("chatArea");
       const currentUser = document.getElementById("currentUser");
+      const userStatus = document.getElementById("userStatus");
       const msgInput = document.getElementById("msgInput");
       const sendBtn = document.getElementById("sendBtn");
-
       const sendFileBtn = document.getElementById("sendFileBtn");
       const fileInput = document.getElementById("fileInput");
 
@@ -106,23 +115,18 @@
         loadStoredUsers();
       });
 
-      showQRBtn.onclick = () => {
-        qrContainer.classList.toggle("hidden");
-      };
+      showQRBtn.onclick = () => qrContainer.classList.toggle("hidden");
 
       addUserBtn.onclick = () => {
         const friendId = peerIdInput.value.trim();
         if (!friendId) return;
-
-        saveUserToLocal(friendId);
+        saveUser(friendId);
         addUserToList(friendId);
         peerIdInput.value = "";
       };
 
       peer.on("connection", (conn) => {
-        if (!connections[conn.peer]) {
-          setupConnection(conn, conn.peer);
-        }
+        if (!connections[conn.peer]) setupConnection(conn, conn.peer);
       });
 
       function setupConnection(conn, id) {
@@ -130,79 +134,64 @@
         messages[id] = messages[id] || [];
 
         conn.on("open", () => {
-          if (!document.querySelector(`[data-id='${id}']`)) {
-            saveUserToLocal(id);
-            addUserToList(id);
-          }
-          if (!currentPeerId) {
-            switchToUser(id);
-          }
+          updateUserStatus(id, true);
+          saveUser(id);
+          addUserToList(id);
         });
 
         conn.on("data", (data) => {
-          if (data.type === "msg") {
-            messages[id].push({ text: data.text, from: "them" });
-          } else if (data.type === "file") {
-            const url = URL.createObjectURL(data.blob);
-            messages[id].push({ file: url, name: data.name, from: "them" });
-          }
-
+          data.timestamp = new Date().toLocaleTimeString();
+          messages[id].push({ ...data, from: "them" });
+          saveMessages();
           if (currentPeerId === id) renderMessages(id);
         });
 
-        conn.on("close", () => {
-          alert(`${id} disconnected`);
-          document.querySelector(`[data-id='${id}']`)?.remove();
-          if (currentPeerId === id) {
-            currentUser.textContent = "No user selected";
-            chatArea.innerHTML = "";
-          }
-          delete connections[id];
-        });
+        conn.on("close", () => updateUserStatus(id, false));
       }
 
       function addUserToList(id) {
         if (document.querySelector(`[data-id='${id}']`)) return;
         const li = document.createElement("li");
-        li.className = "p-2 cursor-pointer hover:bg-gray-100";
-        li.textContent = id;
+        li.className =
+          "flex justify-between items-center p-2 hover:bg-gray-100";
         li.dataset.id = id;
 
-        li.onclick = () => {
-          if (connections[id]) {
-            switchToUser(id);
-          } else {
-            const conn = peer.connect(id);
-            setupConnection(conn, id);
-            conn.on("open", () => {
-              switchToUser(id);
-            });
-          }
+        const btn = document.createElement("button");
+        btn.textContent = id;
+        btn.className = "flex-1 text-left";
+        btn.onclick = () => {
+          if (!connections[id]) setupConnection(peer.connect(id), id);
+          currentPeerId = id;
+          currentUser.textContent = id;
+          renderMessages(id);
         };
 
-        userList.appendChild(li);
-      }
+        const del = document.createElement("button");
+        del.textContent = "❌";
+        del.onclick = () => {
+          li.remove();
+          removeUser(id);
+        };
 
-      function switchToUser(id) {
-        currentPeerId = id;
-        currentUser.textContent = id;
-        renderMessages(id);
+        li.append(btn, del);
+        userList.appendChild(li);
       }
 
       function renderMessages(id) {
         chatArea.innerHTML = "";
-        messages[id].forEach((msg) => {
+        (messages[id] || []).forEach((msg) => {
           const div = document.createElement("div");
-          div.className = `max-w-xs px-3 py-2 rounded-lg text-sm ${
+          div.className = `max-w-xs px-3 py-2 rounded-lg text-sm mb-1 ${
             msg.from === "me" ? "ml-auto bg-green-200" : "mr-auto bg-gray-300"
           }`;
-
-          if (msg.text) {
-            div.textContent = msg.text;
-          } else if (msg.file) {
-            div.innerHTML = `<a href="${msg.file}" download="${msg.name}" class="underline">${msg.name}</a>`;
-          }
-
+          div.innerHTML =
+            msg.text || msg.file
+              ? `<a href="${msg.file}" download="${msg.name}">${msg.name}</a>`
+              : "";
+          const time = document.createElement("div");
+          time.className = "text-xs text-gray-500 mt-1";
+          time.textContent = msg.timestamp || "";
+          div.appendChild(time);
           chatArea.appendChild(div);
         });
         chatArea.scrollTop = chatArea.scrollHeight;
@@ -212,38 +201,60 @@
         const text = msgInput.value.trim();
         if (!text || !currentPeerId) return;
         const conn = connections[currentPeerId];
-        conn.send({ type: "msg", text });
-        messages[currentPeerId].push({ text, from: "me" });
+        const timestamp = new Date().toLocaleTimeString();
+        const data = { type: "msg", text, timestamp };
+        conn.send(data);
+        messages[currentPeerId].push({ ...data, from: "me" });
         msgInput.value = "";
         renderMessages(currentPeerId);
+        saveMessages();
       };
 
       sendFileBtn.onclick = () => fileInput.click();
-
       fileInput.onchange = () => {
         const file = fileInput.files[0];
         if (!file || !currentPeerId) return;
         const conn = connections[currentPeerId];
-        conn.send({ type: "file", name: file.name, blob: file });
+        const timestamp = new Date().toLocaleTimeString();
+        const data = { type: "file", name: file.name, blob: file, timestamp };
+        conn.send(data);
         messages[currentPeerId].push({
           file: URL.createObjectURL(file),
           name: file.name,
           from: "me",
+          timestamp,
         });
         renderMessages(currentPeerId);
+        saveMessages();
       };
 
-      function saveUserToLocal(id) {
-        let stored = JSON.parse(localStorage.getItem("peerUsers") || "[]");
-        if (!stored.includes(id)) {
-          stored.push(id);
-          localStorage.setItem("peerUsers", JSON.stringify(stored));
+      function saveUser(id) {
+        let users = JSON.parse(localStorage.getItem("peerUsers") || "[]");
+        if (!users.includes(id)) {
+          users.push(id);
+          localStorage.setItem("peerUsers", JSON.stringify(users));
         }
       }
 
+      function removeUser(id) {
+        let users = JSON.parse(localStorage.getItem("peerUsers") || "[]");
+        users = users.filter((u) => u !== id);
+        localStorage.setItem("peerUsers", JSON.stringify(users));
+      }
+
       function loadStoredUsers() {
-        const stored = JSON.parse(localStorage.getItem("peerUsers") || "[]");
-        stored.forEach((id) => addUserToList(id));
+        const users = JSON.parse(localStorage.getItem("peerUsers") || "[]");
+        users.forEach(addUserToList);
+      }
+
+      function saveMessages() {
+        localStorage.setItem("chatMessages", JSON.stringify(messages));
+      }
+
+      function updateUserStatus(id, online) {
+        if (currentPeerId === id) {
+          userStatus.textContent = online ? "Online" : "Offline";
+        }
       }
     </script>
   </body>
