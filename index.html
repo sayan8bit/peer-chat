@@ -3,252 +3,214 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>QR Chat</title>
+    <title>QR Chat - WhatsApp UI</title>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-        font-family: "Segoe UI", sans-serif;
-      }
       body {
+        margin: 0;
+        font-family: Arial, sans-serif;
         display: flex;
         height: 100vh;
-        background: #f0f2f5;
-        overflow: hidden;
       }
-
       #sidebar {
-        width: 300px;
-        background: #fff;
-        border-right: 1px solid #ddd;
+        width: 30%;
+        background: #f1f1f1;
         display: flex;
         flex-direction: column;
+        border-right: 1px solid #ccc;
       }
-
-      #user-info {
-        padding: 1rem;
-        border-bottom: 1px solid #eee;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      #contacts {
-        flex: 1;
-        overflow-y: auto;
-      }
-
-      .contact {
-        padding: 0.8rem 1rem;
-        cursor: pointer;
-        border-bottom: 1px solid #f0f0f0;
-      }
-
-      .contact:hover {
-        background: #f9f9f9;
-      }
-
-      #main {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-      }
-
-      #chat-header {
-        padding: 1rem;
-        background: #fff;
-        border-bottom: 1px solid #ddd;
-        font-weight: bold;
-      }
-
       #chat-area {
         flex: 1;
-        padding: 1rem;
-        overflow-y: auto;
         display: flex;
         flex-direction: column;
       }
-
+      #userList {
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+      }
+      .user-item {
+        padding: 10px;
+        cursor: pointer;
+        border-bottom: 1px solid #ddd;
+      }
+      .user-item:hover {
+        background-color: #e0e0e0;
+      }
+      #messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+        background-color: #ece5dd;
+      }
       .message {
         max-width: 70%;
-        padding: 10px;
         margin: 5px 0;
+        padding: 10px;
         border-radius: 10px;
-        word-wrap: break-word;
+        clear: both;
       }
-
       .me {
-        align-self: flex-end;
         background-color: #dcf8c6;
+        float: right;
       }
-      .them {
-        align-self: flex-start;
-        background-color: #eee;
+      .other {
+        background-color: white;
+        float: left;
       }
-
-      #input-area {
-        padding: 0.5rem;
+      #inputArea {
         display: flex;
-        background: #fff;
-        border-top: 1px solid #ddd;
+        border-top: 1px solid #ccc;
+        padding: 10px;
       }
-
-      #messageInput {
+      #inputText {
         flex: 1;
         padding: 10px;
         border: 1px solid #ccc;
         border-radius: 20px;
         margin-right: 10px;
       }
-
       button {
         padding: 10px 15px;
         border: none;
-        background: #007bff;
-        color: #fff;
+        background: #4caf50;
+        color: white;
         border-radius: 20px;
         cursor: pointer;
       }
-
-      #qrPopup {
+      #qrModal {
         position: fixed;
-        top: 60px;
-        right: 20px;
-        background: #fff;
-        padding: 1rem;
-        border: 1px solid #ddd;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        border: 1px solid #ccc;
+        padding: 20px;
         display: none;
-        z-index: 999;
+        z-index: 10;
       }
-
       @media (max-width: 768px) {
         #sidebar {
-          width: 100px;
+          width: 40%;
         }
-        .contact {
-          font-size: 0.8rem;
-        }
-        #user-info span {
-          font-size: 0.8rem;
+      }
+      @media (max-width: 500px) {
+        #sidebar {
+          display: none;
         }
       }
     </style>
   </head>
   <body>
     <div id="sidebar">
-      <div id="user-info">
-        <span id="nickname">You</span>
-        <button onclick="toggleQR()">📱</button>
-      </div>
-      <div id="contacts"></div>
+      <button onclick="showQR()">Show My QR</button>
+      <button onclick="connectToUser()">Connect to a user</button>
+      <div id="userList"></div>
     </div>
-
-    <div id="main">
-      <div id="chat-header">No Contact Selected</div>
-      <div id="chat-area"></div>
-      <div id="input-area">
-        <input type="text" id="messageInput" placeholder="Type a message" />
+    <div id="chat-area">
+      <div id="messages"></div>
+      <div id="inputArea">
+        <input type="text" id="inputText" placeholder="Type a message..." />
         <button onclick="sendMessage()">Send</button>
       </div>
     </div>
 
-    <div id="qrPopup">
-      <p>Your ID:</p>
-      <canvas id="qrCanvas"></canvas>
+    <div id="qrModal">
+      <p>Scan this ID:</p>
+      <div id="qrcode"></div>
+      <p id="peer-id"></p>
+      <button onclick="hideQR()">Close</button>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
     <script>
       let peerId =
-        localStorage.getItem("peer-id") ||
-        "peer_" + Math.random().toString(36).substring(2, 10);
-      localStorage.setItem("peer-id", peerId);
+        localStorage.getItem("peerId") ||
+        "id-" + Math.random().toString(36).substring(2, 10);
+      localStorage.setItem("peerId", peerId);
+
+      let nickname =
+        localStorage.getItem("nickname") || prompt("Enter your nickname:");
+      localStorage.setItem("nickname", nickname);
 
       const peer = new Peer(peerId);
-      const nickname = prompt("Enter your nickname:") || "You";
-      document.getElementById("nickname").textContent = nickname;
-
-      const connections = {};
+      let connections = {}; // store connections with peers
+      let chats = {}; // store message history
       let currentChatId = null;
 
-      function toggleQR() {
-        const qrPopup = document.getElementById("qrPopup");
-        qrPopup.style.display =
-          qrPopup.style.display === "block" ? "none" : "block";
-        QRCode.toCanvas(document.getElementById("qrCanvas"), peerId);
+      peer.on("open", (id) => {
+        document.getElementById("peer-id").innerText = id;
+        QRCode.toCanvas(document.getElementById("qrcode"), id);
+      });
+
+      peer.on("connection", (conn) => {
+        setupConnection(conn);
+      });
+
+      function showQR() {
+        document.getElementById("qrModal").style.display = "block";
       }
 
-      function addContact(id) {
-        if (document.getElementById("contact_" + id)) return;
-        const contactDiv = document.createElement("div");
-        contactDiv.className = "contact";
-        contactDiv.id = "contact_" + id;
-        contactDiv.textContent = id;
-        contactDiv.onclick = () => openChat(id);
-        document.getElementById("contacts").appendChild(contactDiv);
+      function hideQR() {
+        document.getElementById("qrModal").style.display = "none";
       }
 
-      function openChat(id) {
+      function connectToUser() {
+        const id = prompt("Enter peer ID to connect:");
+        if (id && !connections[id]) {
+          const conn = peer.connect(id);
+          conn.on("open", () => setupConnection(conn));
+        }
+      }
+
+      function setupConnection(conn) {
+        const id = conn.peer;
+        connections[id] = conn;
+        chats[id] = chats[id] || [];
+
+        const userItem = document.createElement("div");
+        userItem.className = "user-item";
+        userItem.innerText = id;
+        userItem.onclick = () => switchChat(id);
+        document.getElementById("userList").appendChild(userItem);
+
+        conn.on("data", (data) => {
+          chats[id].push({ text: data, from: "other" });
+          if (id === currentChatId) renderMessages();
+        });
+
+        conn.on("close", () => alert(`Connection to ${id} closed.`));
+
+        if (!currentChatId) switchChat(id);
+      }
+
+      function switchChat(id) {
         currentChatId = id;
-        document.getElementById("chat-header").textContent = id;
-        document.getElementById("chat-area").innerHTML = "";
-        const chat = connections[id].chat || [];
-        for (const msg of chat) appendMessage(msg.text, msg.type);
+        renderMessages();
       }
 
-      function appendMessage(text, type) {
-        const msgDiv = document.createElement("div");
-        msgDiv.className = "message " + type;
-        msgDiv.textContent = text;
-        document.getElementById("chat-area").appendChild(msgDiv);
-        document.getElementById("chat-area").scrollTop =
-          document.getElementById("chat-area").scrollHeight;
+      function renderMessages() {
+        const messagesDiv = document.getElementById("messages");
+        messagesDiv.innerHTML = "";
+        (chats[currentChatId] || []).forEach((msg) => {
+          const div = document.createElement("div");
+          div.className = "message " + msg.from;
+          div.innerText = msg.text;
+          messagesDiv.appendChild(div);
+        });
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
       }
 
       function sendMessage() {
-        const input = document.getElementById("messageInput");
-        const text = input.value.trim();
-        if (!text || !currentChatId) return;
-        input.value = "";
-        appendMessage(text, "me");
-        connections[currentChatId].conn.send({ type: "text", text });
-        connections[currentChatId].chat.push({ type: "me", text });
-      }
-
-      function handleConnection(conn) {
-        const id = conn.peer;
-        addContact(id);
-        connections[id] = { conn, chat: [] };
-
-        conn.on("data", (data) => {
-          if (data.type === "text") {
-            connections[id].chat.push({ type: "them", text: data.text });
-            if (currentChatId === id) appendMessage(data.text, "them");
-          }
-        });
-
-        conn.on("open", () => console.log("Connected to", id));
-        conn.on("close", () => console.log("Disconnected from", id));
-      }
-
-      peer.on("open", (id) => {
-        console.log("Your peer ID:", id);
-      });
-
-      peer.on("connection", handleConnection);
-
-      // Allow connecting manually
-      document.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && e.ctrlKey) {
-          const friendId = prompt("Enter friend's ID:");
-          if (friendId && !connections[friendId]) {
-            const conn = peer.connect(friendId);
-            conn.on("open", () => handleConnection(conn));
-          }
+        const input = document.getElementById("inputText");
+        const text = input.value;
+        if (text && currentChatId && connections[currentChatId]) {
+          connections[currentChatId].send(text);
+          chats[currentChatId].push({ text: text, from: "me" });
+          renderMessages();
+          input.value = "";
         }
-      });
+      }
     </script>
   </body>
 </html>
