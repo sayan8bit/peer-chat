@@ -130,7 +130,13 @@
         messages[id] = messages[id] || [];
 
         conn.on("open", () => {
-          if (!currentPeerId) switchToUser(id);
+          if (!document.querySelector(`[data-id='${id}']`)) {
+            saveUserToLocal(id);
+            addUserToList(id);
+          }
+          if (!currentPeerId) {
+            switchToUser(id);
+          }
         });
 
         conn.on("data", (data) => {
@@ -161,13 +167,19 @@
         li.className = "p-2 cursor-pointer hover:bg-gray-100";
         li.textContent = id;
         li.dataset.id = id;
+
         li.onclick = () => {
-          if (!connections[id]) {
+          if (connections[id]) {
+            switchToUser(id);
+          } else {
             const conn = peer.connect(id);
             setupConnection(conn, id);
+            conn.on("open", () => {
+              switchToUser(id);
+            });
           }
-          switchToUser(id);
         };
+
         userList.appendChild(li);
       }
 
